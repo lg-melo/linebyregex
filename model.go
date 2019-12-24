@@ -15,6 +15,7 @@ type NFA struct{
 	final *State
 }
 
+// Returns a new NFA
 func newNFA(hasInitial, hasEndPoints, hasFinal bool) *NFA {
 	var (
 		initial *State
@@ -47,6 +48,7 @@ func newNFA(hasInitial, hasEndPoints, hasFinal bool) *NFA {
 	}
 }
 
+// Returns an NFA that recognizes anything but '\n'
 func dotNFA() *NFA{
 	first := &State{
 		transition: make(map[byte]map[*State]bool, 128),
@@ -71,6 +73,7 @@ func dotNFA() *NFA{
 	return resp
 }
 
+// Returns an NFA that recognizes 'c'
 func simpleNFA(c byte) *NFA{
 	first := &State{
 		transition: make(map[byte]map[*State]bool),
@@ -92,6 +95,7 @@ func simpleNFA(c byte) *NFA{
 	return resp
 }
 
+// Returns an NFA that recognizes a class (\d, \w, \s and their complements)
 func classNFA(class byte) *NFA{
 	first := &State{
 		transition: make(map[byte]map[*State]bool),
@@ -103,7 +107,7 @@ func classNFA(class byte) *NFA{
 	}
 
 	matchesClass := func(c byte) bool {
-		return class == 'w' &&) isAlphaNum(c ||
+		return class == 'w' && isAlphaNum(c) ||
 			class == 'W' && !isAlphaNum(c) ||
 			class == 'd' && isDigit(c) ||
 			class == 'D' && !isDigit(c) ||
@@ -124,23 +128,14 @@ func classNFA(class byte) *NFA{
 	return resp
 }
 
-/* each endPoint gets epsTransition to initial state */
+// Each endPoint gets an epsTransition to nfa.initial
 func (nfa *NFA) applyCycle(){
-	newEnd := &State{
-		transition: make(map[byte]map[*State]bool), // prob. unnecessary,
-		epsTransition: make(map[*State]bool),
-	}
-
 	for endPoint := range nfa.endPoints {
-		endPoint.epsTransition[newEnd] = true
-		delete(nfa.endPoints, endPoint)
+		endPoint.epsTransition[nfa.initial] = true
 	}
-	
-	nfa.endPoints[newEnd] = true
-	newEnd.epsTransition[nfa.initial] = true
 }
 
-/* Initial state becomes an endPoint */
+// Initial state becomes an endPoint
 func (nfa *NFA) applyOptionality(){
 	newInit := &State{
 		transition: make(map[byte]map[*State]bool), // prob. unnecessary,
@@ -150,10 +145,14 @@ func (nfa *NFA) applyOptionality(){
 	newInit.epsTransition[nfa.initial] = true
 	nfa.initial = newInit
 
+
+	if nfa.endPoints == nil { // maybe unnecessary
+		nfa.endPoints = make(map[*State]bool)
+	}
 	nfa.endPoints[newInit] = true
 }
 
-/* Applies '?', '+' or '*' */
+// Applies '?', '+' or '*'
 func (nfa *NFA) applyRepetition(op byte){
 	if op != '?' {
 		nfa.applyCycle()
@@ -164,7 +163,7 @@ func (nfa *NFA) applyRepetition(op byte){
 	}
 }
 
-/* Concatenates nfa2 onto nfa */
+// Concatenates nfa2 onto nfa
 func (nfa *NFA) concat(nfa2 *NFA) {
 	for endPoint := range nfa.endPoints {
 		endPoint.epsTransition[nfa2.initial] = true
@@ -172,24 +171,13 @@ func (nfa *NFA) concat(nfa2 *NFA) {
 	nfa.endPoints = nfa2.endPoints
 }
 
-/* Adds repetition for nfa patterns */
+// Applies cardinality rule
 func (nfa *NFA) applyCardinality(min, max int) {
 	var lastInit *State
 	initialCopy := nfa.copy()
 
 	if min == 0 {
-		newInit := &State{
-			transition: make(map[byte]map[*State]bool),
-			epsTransition: make(map[*State]bool),
-		}
-
-		newInit.epsTransition[nfa.initial] = true
-		nfa.initial = newInit
-
-		if nfa.endPoints == nil {
-			nfa.endPoints = make(map[*State]bool)
-		}
-		nfa.endPoints[newInit] = true
+		nfa.applyOptionality()
 	} else {
 		for i := 0; i < min - 1; i++ {
 			nfasCopy := initialCopy.copy()
@@ -203,7 +191,8 @@ func (nfa *NFA) applyCardinality(min, max int) {
 		}
 	}
 
-	if lastInit == nil { // case min == 0 or min == 1
+	// min == 0 or min == 1
+	if lastInit == nil { 
 		lastInit = nfa.initial
 	}
 
@@ -229,6 +218,7 @@ func (nfa *NFA) applyCardinality(min, max int) {
 	}
 }
 
+// Applies "r1 | r2" rule to nfa
 func (nfa *NFA) applyDisjunction(nfa2 *NFA) {
 	newInit := &State{
 		transition: make(map[byte]map[*State]bool), // prob. unnecessary,
@@ -244,8 +234,9 @@ func (nfa *NFA) applyDisjunction(nfa2 *NFA) {
 	}
 }
 
+// Returns an equivalent, but different, NFA wrt nfa
 func (nfa *NFA) copy() *NFA{
-	// maps *State from nfa to corresponding *State from resp
+	// maps each *State from nfa to corresponding *State from resp
 	match := make(map[*State]*State)
 
 	hasInitial := nfa.initial != nil
@@ -260,10 +251,6 @@ func (nfa *NFA) copy() *NFA{
 	match[nfa.initial] = resp.initial 
 	copyRecursion(nfa.initial, match)
 
-	// Is the final state also an endpoint?
-	// if it is, then it might not be matched and,
-	// as a result, resp.endPoints[match[nfa.final] == nil] = true
-	// execution of line 34
 	for originalEndPoint := range nfa.endPoints {
 		resp.endPoints[match[originalEndPoint]] = true
 	}
@@ -271,16 +258,15 @@ func (nfa *NFA) copy() *NFA{
 	return resp
 }
 
+// Auxiliary function to nfa's copy method
 func copyRecursion(original *State, match map[*State]*State) {
 	copy := match[original]
 	
 	// normal transitions
 	for c, nextStates := range original.transition {
-		if copy.transition[c] == nil {
-			copy.transition[c] = make(map[*State]bool)
-		}
+		copy.transition[c] = make(map[*State]bool)
 
-		copyNextStates := copy.transition[c]
+		copysTrans := copy.transition[c]
 		for nextState := range nextStates {
 			if match[nextState] == nil {
 				newState := &State{
@@ -291,7 +277,7 @@ func copyRecursion(original *State, match map[*State]*State) {
 				copyRecursion(nextState, match)
 			}
 
-			copyNextStates[match[nextState]] = true
+			copysTrans[match[nextState]] = true
 		}
 	}
 

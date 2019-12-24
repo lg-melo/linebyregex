@@ -8,6 +8,8 @@ import (
 	regex "github.com/lg-melo/linebyregex"
 )
 
+/* TO REVIEW */
+
 // Starts the application, ie:
 	// Receives the command's arguments;
 	// Compiles the input regex into nfa;
@@ -18,7 +20,7 @@ func main(){
 		return
 	}
 
-	pattern, filenames := os.Args[1], os.Args[2:]
+	pattern, filepaths := os.Args[1], os.Args[2:]
 
 	if len(pattern) == 0 {
 		return
@@ -31,8 +33,8 @@ func main(){
 		log.Fatal(err)
 	}
 
-	for _, filename := range filenames {
-		file, err := os.Open(filename)
+	for _, filepath := range filepaths {
+		file, err := os.Open(filepath)
 		
 		if err != nil {
 			log.Println(err)
@@ -40,7 +42,7 @@ func main(){
 		}
 		defer file.Close()
 
-		process(nfa, filename, file)
+		process(nfa, filepath, file)
 	}
 }
 
@@ -62,19 +64,19 @@ func prepare(pattern string) string {
 }
 
 // computes each of the file's lines, printing the valid ones.
-func process(nfa *regex.NFA, filename string, file *os.File) {
+func process(nfa *regex.NFA, filepath string, file *os.File) {
 	scanner := bufio.NewScanner(file)
 	
-	for i := 1; scanner.Scan(); i++ {
+	for lineNum := 1; scanner.Scan(); lineNum++ {
 		line := []byte(scanner.Text())
 
 		if nfa.Accepts(line) {
-			fmt.Printf("file %q, line %d: %q\n", filename, i, line)
+			fmt.Printf("%q:%d: %q\n", filepath, lineNum, line)
 		}
 	}
 
 	err := scanner.Err()
 	if err != nil {
-		log.Printf("error %q during parsing of file %s\n", err.Error(), filename)
+		log.Printf("error %q when parsing file %q\n", err.Error(), filepath)
 	}
 }

@@ -157,8 +157,8 @@ func Compile(pattern string) (err error, nfa *NFA) {
 	}
 
 	resp.final = &State{
-		transition: make(map[byte]map[*State]bool),
-		epsTransition: make(map[*State]bool),
+		transition: make(map[byte]map[*State]bool), // prob. unnecessary
+		epsTransition: make(map[*State]bool), // prob. unecessary
 	}
 
 	for endPoint := range resp.endPoints {

@@ -13,40 +13,43 @@ func (nfa *NFA) Accepts(line []byte) bool{
 	nfa.initial.reaches(currentStates)
 
 	// process line
-	temp := make(map[*State]bool)
+	newStates := make(map[*State]bool)
 	for _, c := range line {
 		if len(currentStates) == 0 {
 			break
 		}
 
 		for state := range currentStates {
+			if state.transition == nil {
+				continue
+			}
+
 			nextStates := state.transition[c]
-			
 			if nextStates == nil {
 				continue
 			}
 
 			for nextState := range nextStates {
-				nextState.reaches(temp)
+				nextState.reaches(newStates)
 			}
 		}
 
 		// updates the current set of states
 		for oldState := range currentStates {
-			if !temp[oldState] {
+			if !newStates[oldState] {
 				delete(currentStates, oldState)
 			}
 		}
-		for newState := range temp {
+		for newState := range newStates {
 			currentStates[newState] = true
-			delete(temp, newState)
+			delete(newStates, newState)
 		}
 	}
 
 	return currentStates[nfa.final]
 }
 
-// puts in 'result' all states reachable from s through epsilon transitions
+// puts in 'result' all states reachable from s through 0+ epsilon transitions
 func (s *State) reaches(result map[*State]bool) {
 	push := func(l *list.List, s *State){
 		l.PushBack(s);
