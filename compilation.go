@@ -1,35 +1,9 @@
-package regex
+package linebyregex
 
 import (
 	"errors"
 	"strconv"
 )
-
-func isSpecial(c byte) bool {
-	switch c {
-	case '(', ')', '[', ']', '{', ',', '}', '?', '+', '*', '\\', '|', '.':
-		return true
-	}
-
-	return false
-}
-
-func isRepetition(c byte) bool {
-	return c == '?' || c == '+' || c == '*'
-}
-
-func isClass(c byte) bool {
-	switch c {
-	case 'w', 'W', 'd', 'D', 's', 'S':
-		return true
-	}
-
-	return false
-}
-
-func isAlphaNum(c byte) bool {
-	return '0' <= c && c <= '9' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || c == '_';
-}
 
 func cardinality(pattern string, start int) (err error, min, max, nextInd int){
 	var start2 int
@@ -175,7 +149,7 @@ func compileCharSet(pattern string, start int) (err error, nextInd int, resp *NF
 	return nil, nextInd, resp
 }
 
-func compile(pattern string) (err error, nfa *NFA) {
+func Compile(pattern string) (err error, nfa *NFA) {
 	err, _, resp := auxCompile(pattern, 0)
 
 	if err != nil {
@@ -298,21 +272,4 @@ func auxCompile(pattern string, start int) (err error, nextInd int, resp *NFA){
 	}
 
 	return errors.New("unclosed pattern"), -1, nil
-}
-
-func preparePattern(pattern string) string {
-	// match whole line
-	if pattern[0] == '^' && pattern[len(pattern) - 1] == '$' {
-		return pattern[1:len(pattern) - 1] + ")"
-	}
-	// match prefix
-	if pattern[0] == '^' {
-		return pattern[1:] + ".*)"
-	}
-	// match sufix
-	if pattern[len(pattern) - 1] == '$' {
-		return ".*" + pattern[:len(pattern) - 1] + ")"
-	}
-
-	return ".*" + pattern + ".*)"
 }

@@ -1,4 +1,4 @@
-package regex
+package linebyregex
 
 const (
 	infinite int = 1 << 31 - 1
@@ -17,13 +17,13 @@ type NFA struct{
 
 func newNFA(hasInitial, hasEndPoints, hasFinal bool) *NFA {
 	var (
-		initialState *State
+		initial *State
 		endPoints map[*State]bool
-		finalState *State
+		final *State
 	)
 
 	if hasInitial {
-		initialState = &State{
+		initial = &State{
 			transition: make(map[byte]map[*State]bool),
 			epsTransition: make(map[*State]bool),
 		}
@@ -34,27 +34,27 @@ func newNFA(hasInitial, hasEndPoints, hasFinal bool) *NFA {
 	}
 
 	if hasFinal {
-		finalState = &State{
+		final = &State{
 			transition: make(map[byte]map[*State]bool),
 			epsTransition: make(map[*State]bool),
 		}
 	}
 
 	return &NFA{
-		initial: initialState,
+		initial: initial,
 		endPoints: endPoints,
-		final: finalState,
+		final: final,
 	}
 }
 
 func dotNFA() *NFA{
 	first := &State{
 		transition: make(map[byte]map[*State]bool, 128),
-		epsTransition: make(map[*State]bool),
+		epsTransition: make(map[*State]bool), // prob. unnecessary
 	}
 
 	second := &State{
-		transition: make(map[byte]map[*State]bool),
+		transition: make(map[byte]map[*State]bool), // prob. unnecessary
 		epsTransition: make(map[*State]bool),
 	}
 
@@ -62,7 +62,6 @@ func dotNFA() *NFA{
 		first.transition[byte(i)] = make(map[*State]bool)
 		first.transition[byte(i)][second] = true
 	}
-
 	delete(first.transition['\n'], second)
 
 	resp := newNFA(false, true, false)
@@ -75,11 +74,11 @@ func dotNFA() *NFA{
 func simpleNFA(c byte) *NFA{
 	first := &State{
 		transition: make(map[byte]map[*State]bool),
-		epsTransition: make(map[*State]bool),
+		epsTransition: make(map[*State]bool), // prob. unnecessary
 	}
 	
 	second := &State{
-		transition: make(map[byte]map[*State]bool),
+		transition: make(map[byte]map[*State]bool), // prob. unnecessary
 		epsTransition: make(map[*State]bool),
 	}
 
@@ -96,20 +95,20 @@ func simpleNFA(c byte) *NFA{
 func classNFA(class byte) *NFA{
 	first := &State{
 		transition: make(map[byte]map[*State]bool),
-		epsTransition: make(map[*State]bool),
+		epsTransition: make(map[*State]bool), // prob. unnecessary
 	}
 	second := &State{
-		transition: make(map[byte]map[*State]bool),
+		transition: make(map[byte]map[*State]bool), // prob. unnecessary
 		epsTransition: make(map[*State]bool),
 	}
 
 	matchesClass := func(c byte) bool {
-		return class == 'w' && isAlphaNum(c) ||
+		return class == 'w' &&) isAlphaNum(c ||
 			class == 'W' && !isAlphaNum(c) ||
-			class == 'd' && ('0' <= c && c <= '9') ||
-			class == 'D' && !('0' <= c && c <= '9') ||
-			class == 's' && (c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f') ||
-			class == 'S' && !(c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\f')
+			class == 'd' && isDigit(c) ||
+			class == 'D' && !isDigit(c) ||
+			class == 's' && isSpace(c) ||
+			class == 'S' && !isSpace(c)
 	}
 	for i := 0; i < 128; i++ {
 		if matchesClass(byte(i)) {
@@ -125,54 +124,47 @@ func classNFA(class byte) *NFA{
 	return resp
 }
 
+/* each endPoint gets epsTransition to initial state */
+func (nfa *NFA) applyCycle(){
+	newEnd := &State{
+		transition: make(map[byte]map[*State]bool), // prob. unnecessary,
+		epsTransition: make(map[*State]bool),
+	}
+
+	for endPoint := range nfa.endPoints {
+		endPoint.epsTransition[newEnd] = true
+		delete(nfa.endPoints, endPoint)
+	}
+	
+	nfa.endPoints[newEnd] = true
+	newEnd.epsTransition[nfa.initial] = true
+}
+
+/* Initial state becomes an endPoint */
+func (nfa *NFA) applyOptionality(){
+	newInit := &State{
+		transition: make(map[byte]map[*State]bool), // prob. unnecessary,
+		epsTransition: make(map[*State]bool),
+	}
+	
+	newInit.epsTransition[nfa.initial] = true
+	nfa.initial = newInit
+
+	nfa.endPoints[newInit] = true
+}
+
+/* Applies '?', '+' or '*' */
 func (nfa *NFA) applyRepetition(op byte){
-	var newInit *State
-
-	switch op {
-	case '?': {
-		newInit = &State{
-			transition: make(map[byte]map[*State]bool),
-			epsTransition: make(map[*State]bool),
-		}
-
-		newInit.epsTransition[nfa.initial] = true
-		nfa.initial = newInit
-		
-		if nfa.endPoints == nil {
-			nfa.endPoints = make(map[*State]bool)
-		}
-		nfa.endPoints[newInit] = true
+	if op != '?' {
+		nfa.applyCycle()
 	}
-	case '+', '*': {
-		if op == '*' {
-			newInit = &State{
-				transition: make(map[byte]map[*State]bool),
-				epsTransition: make(map[*State]bool),
-			}
-			
-			newInit.epsTransition[nfa.initial] = true
-			nfa.initial = newInit
-		}
-
-		newEnd := &State{
-			transition: make(map[byte]map[*State]bool),
-			epsTransition: make(map[*State]bool),
-		}
-
-		for endPoint := range nfa.endPoints {
-			endPoint.epsTransition[newEnd] = true
-			delete(nfa.endPoints, endPoint)
-		}
-		nfa.endPoints[newEnd] = true
-		newEnd.epsTransition[nfa.initial] = true
-
-		if op == '*' {
-			nfa.endPoints[newInit] = true
-		}
-	}
+	
+	if op != '+' {
+		nfa.applyOptionality()
 	}
 }
 
+/* Concatenates nfa2 onto nfa */
 func (nfa *NFA) concat(nfa2 *NFA) {
 	for endPoint := range nfa.endPoints {
 		endPoint.epsTransition[nfa2.initial] = true
@@ -180,6 +172,7 @@ func (nfa *NFA) concat(nfa2 *NFA) {
 	nfa.endPoints = nfa2.endPoints
 }
 
+/* Adds repetition for nfa patterns */
 func (nfa *NFA) applyCardinality(min, max int) {
 	var lastInit *State
 	initialCopy := nfa.copy()
@@ -238,7 +231,7 @@ func (nfa *NFA) applyCardinality(min, max int) {
 
 func (nfa *NFA) applyDisjunction(nfa2 *NFA) {
 	newInit := &State{
-		transition: make(map[byte]map[*State]bool),
+		transition: make(map[byte]map[*State]bool), // prob. unnecessary,
 		epsTransition: make(map[*State]bool),
 	}
 

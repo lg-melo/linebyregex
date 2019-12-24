@@ -1,68 +1,10 @@
-package regex
+package linebyregex
 
 import (
-	"os"
-	"log"
-	"fmt"
-	"bufio"
 	"container/list"
 )
 
-// Starts the application, that is:
-	// Receives the command's arguments;
-	// Compiles the input regex into nfa;
-	// Parses each input file one line at a time.
-func Run(){
-	if len(os.Args) < 3 {
-		fmt.Println("Usage: command pattern file...")
-		return
-	}
-
-	pattern, filenames := os.Args[1], os.Args[2:]
-
-	if len(pattern) == 0 {
-		return
-	}
-	
-	pattern = preparePattern(pattern)
-	err, nfa := compile(pattern)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for _, filename := range filenames {
-		file, err := os.Open(filename)
-		
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		defer file.Close()
-
-		nfa.processFile(filename, file)
-	}
-}
-
-// computes each of the file's lines, printing the valid ones.
-func (nfa *NFA) processFile(filename string, file *os.File) {
-	scanner := bufio.NewScanner(file)
-	
-	for i := 1; scanner.Scan(); i++ {
-		line := []byte(scanner.Text())
-
-		if nfa.accepts(line) {
-			fmt.Printf("file %q, line %d: %q\n", filename, i, line)
-		}
-	}
-
-	err := scanner.Err()
-	if err != nil {
-		log.Printf("error %q during parsing of file %s\n", err.Error(), filename)
-	}
-}
-
-func (nfa *NFA) accepts(line []byte) bool{
+func (nfa *NFA) Accepts(line []byte) bool{
 	if nfa.initial == nil {
 		return false
 	}
@@ -97,9 +39,7 @@ func (nfa *NFA) accepts(line []byte) bool{
 		}
 		for newState := range temp {
 			currentStates[newState] = true
-		}
-		for k := range temp {
-			delete(temp, k)
+			delete(temp, newState)
 		}
 	}
 
